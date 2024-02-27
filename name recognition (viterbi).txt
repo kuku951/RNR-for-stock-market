@@ -1,0 +1,34 @@
+     
+     for(name_id=0;name_id<Name_No;name_id++)//Names
+        for(int model_len=0;model_len<Len[name_id];model_len++)//HMM models for a specific name 
+         for(int k=0;k<Model[HMM_ID_List[name_id][model_len]].State;k++) //HMM state
+                 Delta[name_id][model_len][k]=(float)Min_Delta;
+
+       for(name_id=0;name_id<Name_No;name_id++)
+      	     Delta[name_id][0][0]=(float)0.0;
+
+for(frame=0;frame<Total_Frame;frame++) //輸入語句有多少個feature vectors
+ {
+    for(name_id=0;name_id<Name_No;name_id++) //對於所有人名展開HMM平面
+    {
+      for(model_len=Len[name_id]-1;model_len>=0;model_len--) //HMM models for a specific name 
+     {
+        for(k=Model[HMM_ID_List[name_id][model_len]].State-2;k>=1;k--)//HMM state
+        {
+          val1=Delta[name_id][model_len][k-1]+Model[HMM_ID_List[name_id][model_len]].Trans[k-1][k];//來自前一個時間、前一個狀態
+          val2=Delta[name_id][model_len][k]+Model[HMM_ID_List[name_id][model_len]].Trans[k][k];//來自前一個時間、同一個狀態
+          if(val1 > val2)
+               max_val=val1;
+            else
+               max_val=val2;
+           Delta[name_id][model_len][k]=max_val+B_O[frame][HMM_ID_List[name_id][model_len]][k];
+         } //for HMM state
+
+         Delta[name_id][model_len][0]=Delta[name_id][model_len-1][Model[HMM_ID_List[name_id][model_len-1]].State-2]
+            +Model[HMM_ID_List[name_id][model_len-1]].Trans[Model[HMM_ID_List[name_id][model_len-1]].State-2]
+                                                                                                       [Model[HMM_ID_List[name_id][model_len-1]].State-1];
+       } //for Model_len
+       Delta[name_id][0][0]=(float) Min_Delta; 
+       Score[name_id]=Delta[name_id][Len[name_id]-1][Model[HMM_ID_List[name_id][Len[name_id]-1]].State-2];
+     } //for name_id
+ } //for speech frame
