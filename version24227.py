@@ -8,6 +8,19 @@ import plotly.graph_objects as go
 import matplotlib.dates as mdates
 import math
 
+# class SimpleNN(torch.nn.Module):
+#     def __init__(self):
+#         super(SimpleNN, self).__init__()
+#         self.fc1 = torch.nn.Linear(2, 1)
+
+#     def forward(self, x):
+#         x = self.fc1(x)
+#         return x
+
+# param_model = SimpleNN()
+# criterion = torch.nn.MSELoss()
+# optimizer = optim.Adam(param_model.parameters(), lr=0.01)
+
 # read csv
 data = pd.read_csv("ra_new2013_2023_copy2.csv", encoding='latin1')
 data['time'] = pd.to_datetime(data['time'])
@@ -73,7 +86,7 @@ strength_indicator = y_pred
 # 在日差值矩陣前加一列0
 #strength_indicator = np.hstack((np.zeros((diffs.shape[0], 1)), diffs))
 
-
+output_data=[]
 # 輸出預測的強弱指標和對應的日期 idx代表第幾組預測
 for idx, date_block in enumerate(dates_test):
     mean_a=0
@@ -158,18 +171,47 @@ for idx, date_block in enumerate(dates_test):
                 
         real_close=[]
         predict_close=[]
+        true_index=0
+
+        first_date = date_block.iloc[0].strftime('%Y-%m-%d')
+        last_date = date_block.iloc[-1].strftime('%Y-%m-%d')
         # 輸出日期區間中每天的預測
         for date, strength in zip(date_block, strength_indicator[idx]):
             print(f"Date: {date}, Strength Indicator: {strength}, Neighbors Count: {neighbors_count[idx]}")
             real_close.append(data.loc[data['time'] == date, 'close'].values[0])#將真實收盤價加入
+            true_index = data.index[data['time'] == date][0]
+            print(true_index)
             if strength<1:
                 predict_close.append(strength+1)
-        print("real_percentage change : ",(real_close[19]-real_close[0])/real_close[0])
+        real_percentage_change=((real_close[19]-real_close[0])/real_close[0])*100
+        print("real_percentage change : ",real_percentage_change,"%")
+        # param_y = ((real_close[19]-real_close[0])/real_close[0])*100
+        # param_x = [0, 0]
+        if neighbors_count[idx]==0:
+            # param_x[0] = sum(data[true_index-29:true_index-20]["foreign_buy"])+100
+            strength_indicator_value=sum(data[true_index-29:true_index-20]["foreign_buy"])+100
+            print("strength indicator : ",sum(data[true_index-29:true_index-20]["foreign_buy"])+100)
         temp=1
         for i in predict_close:
             temp*=i
         print("predict_percentage change : ",(temp-1)*100," %")
-        print("算術平均 : ",mean_a," %")
+        if neighbors_count[idx]!=0:
+            strength_indicator_value=mean_a*100
+            # param_x[1] = mean_a*10
+            print("strength indicator : ",mean_a*100)#算術平均
+
+        output_data.append([first_date, last_date, strength_indicator_value, real_percentage_change, neighbors_count[idx]])
+        
+        # for i in range(20):
+        #     param_model.train()
+        #     optimizer.zero_grad()
+        #     param_y_pred = param_model(torch.Tensor(param_x))
+        #     loss = criterion(param_y_pred, param_y)
+        #     loss.backward()
+        #     optimizer.step()
+        
+        # param_model.eval()
+        # print(torch.Tensor(param_x))
         
         # 確保limit 不超過 x_dts的索引範圍
         if limit < len(x_dts):
@@ -255,6 +297,14 @@ for idx, date_block in enumerate(dates_test):
     # 根據價格變動決定顏色
     colors = ['red' if change > 0 else 'blue' for change in price_changes]
     break #直接結束不然會重複組數
+headers = ['First Date', 'Last Date', 'Strength Indicator', 'Real Percentage Change', 'Neighbors Count']
+
+        # 標題
+print(f"{headers[0]:<12} {headers[1]:<12} {headers[2]:<20} {headers[3]:<25} {headers[4]:<15}")
+
+        # 數據
+for row in output_data:
+    print(f"{row[0]:<12} {row[1]:<12} {row[2]:<20.2f} {row[3]:<25.6f} {row[4]:<15}")
 print(len(dates_test))
 # 繪製 y_test 和 y_pred
 plt.figure(figsize=(14, 6))
