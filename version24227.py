@@ -6,6 +6,7 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import matplotlib.dates as mdates
+import math
 
 # read csv
 data = pd.read_csv("ra_new2013_2023_copy2.csv", encoding='latin1')
@@ -18,7 +19,7 @@ print(corr['percentage'])
 #close_prices = data.drop(columns=['K(9,3)', 'D(9,3)', 'J', 'DIF12-26', 'MACD9', 'OSC','financing','financing_difference','tomorrow']).values
 #features=data.drop(columns=['K(9,3)', 'D(9,3)', 'J', 'DIF12-26', 'MACD9', 'OSC','financing','financing_difference','tomorrow'])
 #features=['close','EMA5','EMA10','EMA60','EMA120','UB2.00','trust','dealer','volume','MA5','MA10']
-features=['trust_buy','close','financing_error']
+features=['trust_buy','percentage','financing_error',"foreign_buy"]
 #print(features)
 # 獲取日期
 
@@ -66,7 +67,7 @@ neighbors_indices = model.radius_neighbors(X_test, return_distance=False)#輸出
 
 #print("NB : ",neighbors_indices)
 #計算強弱指標
-strength_indicator = y_pred - y_test
+strength_indicator = y_pred
 # 計算預測值的日差值
 #diffs = np.diff(y_pred, axis=1)
 # 在日差值矩陣前加一列0
@@ -75,15 +76,19 @@ strength_indicator = y_pred - y_test
 
 # 輸出預測的強弱指標和對應的日期 idx代表第幾組預測
 for idx, date_block in enumerate(dates_test):
+    mean_a=0
     limit = 0
-    print("enu : ",enumerate(dates_test))
     # 輸出該日期區間的每一天的預測date, 
-    for date,strength in zip(date_block, strength_indicator[idx]): #strength_indicator[idx]代表是預測完扣掉原本該有的 他的[]中的第idx組一組有n個預測結果
+    #for date,strength in zip(date_block, strength_indicator[idx]): #strength_indicator[idx]代表是預測完扣掉原本該有的 他的[]中的第idx組一組有n個預測結果
 
-        print(f"Date: {date}, Strength Indicator: {strength}, Neighbors Count: {neighbors_count[idx]}")
+        #print(f"Date: {date}, Strength Indicator: {strength}, Neighbors Count: {neighbors_count[idx]}")
 
     #輸出相似的日期
     neighbor_indices = neighbors_indices[idx]
+
+    #紀錄EV用
+    changes = []  # 儲存全部鄰居的漲跌幅
+    total_neighbors = len(neighbors_indices[idx])
     
     #輸出數據點相似的日期
     for idx, date_block in enumerate(dates_test):
@@ -96,17 +101,77 @@ for idx, date_block in enumerate(dates_test):
         else:
             # 輸出每個鄰居的日期
             for n_idx in neighbor_indices:
+                print("n_idx : ",n_idx)
                 neighbor_dates = x_dtr[n_idx]  # 獲取鄰居的日期
                 first_date = neighbor_dates.iloc[0]  # 第一天
                 last_date = neighbor_dates.iloc[-1]  # 最後一天
-                print(f"Neighbor {n_idx}: {first_date} to {last_date}")
 
+                y_neighbor_dates = y_dates[n_idx]
+                #print("y_neighbor_dates:",y_neighbor_dates.iloc[0])
+                if len(y_neighbor_dates) >= 20:
+                    first_day_close = data.loc[data['time'] == y_neighbor_dates.iloc[0], 'close'].values[0]  # 相同鄰居預測20日之第一日收盤價
+                    last_day_close = data.loc[data['time'] == y_neighbor_dates.iloc[19], 'close'].values[0]  # 相同鄰居預測20日之最後一日收盤價
+                    if first_day_close != 0:  # 防止除以零
+                        price_change_percentage = ((last_day_close - first_day_close) / first_day_close)
+                        if first_day_close != 0:
+                            change_percentage = ((last_day_close - first_day_close) / first_day_close) 
+                            changes.append(change_percentage)
+                            print(f"Neighbor {n_idx}: Change from day 1 to day 20: {change_percentage:.2f}%")
+                        else:
+                            print(f"Neighbor {n_idx}: First day close is zero, cannot compute percentage change.")
+                    else:
+                        price_change_percentage = 0
+                    print(f"Neighbor {n_idx}: {first_date} to {last_date}, 20 days Price Change: {price_change_percentage*100:.2f}%")
+                else:
+                    print(f"Neighbor {n_idx}: {first_date} to {last_date}, Not enough data for 20 days price change calculation or invalid index.")
+            if changes:#幾何平均數
+                print(changes)
+                adjusted_changes = [change+1 for change in changes] #因為幾何平均數需要為正值所以將他們全部+1
+                #print("adjusted_changes : ",adjusted_changes)
+                product = math.prod(adjusted_changes)
+                geometric_mean=product ** (1/len(changes))
+                print(f"Adjusted Rooted Sum for Test Point {idx}: {(geometric_mean-1)*100:.2f}%")
+                 # 算術平均數
+                mean = np.mean(changes)
+                mean_a=mean*100
+                print("算術平均數:", mean*100,"%")
+
+                # 標準差
+                std_dev = np.std(changes)
+                print("標準差:", std_dev*100,"%")
+                changes=[]
+                adjusted_changes=[]
+                # 繪製高斯分布圖
+                plt.hist(adjusted_changes, bins=30, density=True, alpha=0.6, color='b')
+
+                # 繪製高斯分布的理論曲線
+                xmin, xmax = plt.xlim()
+                x = np.linspace(xmin, xmax, 100)
+                p = np.exp(-0.5 * ((x - mean) / std_dev)**2) / (std_dev * np.sqrt(2 * np.pi))
+                plt.plot(x, p, 'k', linewidth=2)
+                title = "Fit results: mean = %.2f,  std = %.2f" % (mean, std_dev)
+                plt.title(title)
+
+                plt.show()
+            else:
+                print("No changes to calculate rooted sum.")
+                
+        real_close=[]
+        predict_close=[]
         # 輸出日期區間中每天的預測
         for date, strength in zip(date_block, strength_indicator[idx]):
             print(f"Date: {date}, Strength Indicator: {strength}, Neighbors Count: {neighbors_count[idx]}")
+            real_close.append(data.loc[data['time'] == date, 'close'].values[0])#將真實收盤價加入
+            if strength<1:
+                predict_close.append(strength+1)
+        print("real_percentage change : ",(real_close[19]-real_close[0])/real_close[0])
+        temp=1
+        for i in predict_close:
+            temp*=i
+        print("predict_percentage change : ",(temp-1)*100," %")
+        print("算術平均 : ",mean_a," %")
         
-
-        # 確保 limit 不超過 x_dts 的索引範圍
+        # 確保limit 不超過 x_dts的索引範圍
         if limit < len(x_dts):
             group_dates = x_dts[limit]  # 取出當前的日期組
             mask = data['time'].isin(group_dates)
@@ -144,40 +209,40 @@ for idx, date_block in enumerate(dates_test):
         else:
             print("No more groups to display.")
         
-        for n_idx in neighbor_indices:
-             # 獲取鄰居的日期
-            neighbor_dates = x_dtr[n_idx]
+        # for n_idx in neighbor_indices:
+        #      # 獲取鄰居的日期
+        #     neighbor_dates = x_dtr[n_idx]
             
-            # 獲取對應的收盤價和 trust_buy
-            neighbor_data = data.loc[data['time'].isin(neighbor_dates)]
+        #     # 獲取對應的收盤價和 trust_buy
+        #     neighbor_data = data.loc[data['time'].isin(neighbor_dates)]
             
-            # 創建一個 figure 和兩個 subplots: (2 rows, 1 column)
-            fig, ax = plt.subplots(2, 1, figsize=(10, 10))  # 調整 figsize 以適應垂直排列的兩個圖表
+        #     # 創建一個 figure 和兩個 subplots: (2 rows, 1 column)
+        #     fig, ax = plt.subplots(2, 1, figsize=(10, 10))  # 調整 figsize 以適應垂直排列的兩個圖表
 
-            # 第一個 subplot: 繪製收盤價線圖
-            ax[0].plot(neighbor_data['time'], neighbor_data['close'], marker='o', linestyle='-', color='blue')
-            # 設定日期格式
-            locator = mdates.AutoDateLocator()
-            formatter = mdates.AutoDateFormatter(locator)
-            ax[0].xaxis.set_major_locator(locator)
-            ax[0].xaxis.set_major_formatter(formatter)
-            ax[0].set_title(f'Neighbor {n_idx} Close Prices Over Time')
-            ax[0].set_xlabel('Date')
-            ax[0].set_ylabel('Close Price')
-            ax[0].tick_params(axis='x', rotation=45)
+        #     # 第一個 subplot: 繪製收盤價線圖
+        #     ax[0].plot(neighbor_data['time'], neighbor_data['close'], marker='o', linestyle='-', color='blue')
+        #     # 設定日期格式
+        #     locator = mdates.AutoDateLocator()
+        #     formatter = mdates.AutoDateFormatter(locator)
+        #     ax[0].xaxis.set_major_locator(locator)
+        #     ax[0].xaxis.set_major_formatter(formatter)
+        #     ax[0].set_title(f'Neighbor {n_idx} Close Prices Over Time')
+        #     ax[0].set_xlabel('Date')
+        #     ax[0].set_ylabel('Close Price')
+        #     ax[0].tick_params(axis='x', rotation=45)
 
-            # 第二個 subplot: 繪製 trust_buy 長條圖
-            ax[1].bar(neighbor_data['time'], neighbor_data['trust_buy'], color='green')
-            # 設定日期格式
-            ax[1].xaxis.set_major_locator(locator)
-            ax[1].xaxis.set_major_formatter(formatter)
-            ax[1].set_title(f'Neighbor {n_idx} Trust Buy Over Time')
-            ax[1].set_xlabel('Date')
-            ax[1].set_ylabel('Trust Buy')
-            ax[1].tick_params(axis='x', rotation=45)
+        #     # 第二個 subplot: 繪製 trust_buy 長條圖
+        #     ax[1].bar(neighbor_data['time'], neighbor_data['trust_buy'], color='green')
+        #     # 設定日期格式
+        #     ax[1].xaxis.set_major_locator(locator)
+        #     ax[1].xaxis.set_major_formatter(formatter)
+        #     ax[1].set_title(f'Neighbor {n_idx} Trust Buy Over Time')
+        #     ax[1].set_xlabel('Date')
+        #     ax[1].set_ylabel('Trust Buy')
+        #     ax[1].tick_params(axis='x', rotation=45)
 
-            plt.tight_layout()  # 自動調整子圖參數，以給定的填充參數
-            plt.show()
+        #     plt.tight_layout()  # 自動調整子圖參數，以給定的填充參數
+        #     plt.show()
 
         print("------")  # 分隔符
         input("Press Enter to continue...")  # 暫停執行

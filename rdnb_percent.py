@@ -103,14 +103,14 @@ for idx, date_block in enumerate(dates_test):
         if len(neighbor_indices) == 0:
             print("No neighbors found for this test instance.")
         else:
-            # 打印每个邻居的日期
+            # 輸出每個鄰居的日期
             for n_idx in neighbor_indices:
-                neighbor_dates = x_dtr[n_idx]  # 获取邻居的日期
+                neighbor_dates = x_dtr[n_idx]  # 獲取鄰居的日期
                 first_date = neighbor_dates.iloc[0]  # 第一天
-                last_date = neighbor_dates.iloc[-1]  # 最后一天
+                last_date = neighbor_dates.iloc[-1]  # 最後一天
                 print(f"Neighbor {n_idx}: {first_date} to {last_date}")
 
-        # 输出该日期区间的每一天的预测
+        # 輸出該日期區間的每一天的預測
         for date, strength in zip(date_block, strength_indicator[idx]):
             print(f"Date: {date}, Strength Indicator: {strength}, Neighbors Count: {neighbors_count[idx]}")
 

@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 # Parameters
 initial_probs = np.array([0.5, 0.2, 0.3])
@@ -29,6 +30,13 @@ def forward_algorithm(obs):
     return alpha
 
 alpha = forward_algorithm(obs)
+
+numbers=[-0.0152,-0.0885]
+incremented_numbers = [num + 1 for num in numbers]
+product = math.prod(incremented_numbers)
+geometric_mean=product ** (1/len(numbers))
+print("nn",geometric_mean)
+
 print("Alpha values:")
 print(alpha)
 print("\nProbability of observation sequence:", np.sum(alpha[-1]))
